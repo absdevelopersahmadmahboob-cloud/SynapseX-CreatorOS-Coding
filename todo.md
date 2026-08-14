@@ -25,3 +25,4 @@
 - [x] Mark accepted code as unverified instead of failed when no isolated runner is configured.
 - [x] Remove the conflicting explicit pnpm version from the GitHub Actions workflow and verify CI passes.
 - [ ] Make the GitHub publish script safely update an existing main branch before syncing the CI fix.
+- [x] Remove CI test dependencies on private runtime environment variables and GitHub credentials.

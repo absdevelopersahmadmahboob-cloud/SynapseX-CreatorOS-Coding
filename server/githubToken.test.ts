@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 describe("GitHub publishing credential", () => {
-  it("authenticates with the configured GitHub token", async () => {
+  it.skipIf(!process.env.GH_TOKEN)("authenticates with the configured GitHub token", async () => {
     const token = process.env.GH_TOKEN;
-    expect(token).toBeTruthy();
+    if (!token) throw new Error("GH_TOKEN is required for this opt-in credential validation.");
 
     const response = await fetch("https://api.github.com/user", {
       headers: {
