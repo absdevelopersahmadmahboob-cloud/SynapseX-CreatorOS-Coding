@@ -18,6 +18,7 @@ const statusTone = {
   needs_approval: "text-amber-300",
   awaiting_review: "text-violet-300",
   verifying: "text-blue-300",
+  unverified: "text-slate-300",
   passed: "text-emerald-300",
   failed: "text-red-300",
 } as const;
@@ -108,16 +109,17 @@ export default function Home() {
   if (!isAuthenticated) return <LoginScreen />;
 
   return (
-    <main className="min-h-screen bg-[#090d17] font-mono text-slate-200 selection:bg-emerald-400/30">
-      <header className="flex min-h-14 items-center justify-between border-b border-emerald-300/20 bg-[#0b1020] px-4 sm:px-6">
+    <main className="flex h-dvh flex-col overflow-hidden bg-[#090d17] font-mono text-slate-200 selection:bg-emerald-400/30">
+      <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-emerald-300/20 bg-[#0b1020] px-4 sm:px-6">
         <div className="flex items-center gap-3"><div className="flex size-8 items-center justify-center border border-emerald-300/40 bg-emerald-300/10 text-emerald-300"><Braces className="size-4" /></div><div><h1 className="font-sans text-sm font-extrabold tracking-tight text-white">SynapseX CreatorOS Coding</h1><p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">PowerShell Command Center</p></div></div>
         <div className="flex items-center gap-2"><input ref={archiveInput} className="hidden" type="file" accept=".zip,application/zip" onChange={event => importZip(event.target.files?.[0])} /><TerminalButton onClick={() => archiveInput.current?.click()} disabled={!activeProjectId || importing}><Upload className="size-3.5" />Import</TerminalButton><TerminalButton onClick={exportZip} disabled={!files.data?.length || exporting}><Download className="size-3.5" />Export</TerminalButton><TerminalButton onClick={logout}>Sign out</TerminalButton></div>
       </header>
 
-      <section className="mx-auto max-w-[1600px] p-3 sm:p-5">
-        <div className="border border-slate-700/80 bg-[#0d1324] shadow-[0_24px_90px_rgba(0,0,0,.35)]">
+      <section className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col p-3 sm:p-5">
+        <div className="flex min-h-0 flex-1 flex-col border border-slate-700/80 bg-[#0d1324] shadow-[0_24px_90px_rgba(0,0,0,.35)]">
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-700/80 bg-[#0a0f1d] px-3 py-2 text-[11px] text-slate-400"><TerminalSquare className="size-3.5 text-emerald-300" /><span>PS C:\SynapseX\CreatorOS\Coding</span><span className="hidden text-slate-600 sm:inline">|</span><span className="text-emerald-300">status: ready</span><span className="ml-auto hidden text-slate-500 sm:inline">input: multilingual / output: Roman Urdu</span></div>
-          <div className="grid min-h-[57vh] grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_290px]">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="grid min-h-[440px] grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_290px]">
             <aside className="border-b border-slate-700/80 p-3 lg:border-b-0 lg:border-r">
               <TerminalLabel>Workspace</TerminalLabel>
               <div className="mt-2 flex gap-2"><select value={activeProjectId ?? ""} onChange={event => { setActiveProjectId(Number(event.target.value)); setActiveRunId(null); setActiveFilePath(null); }} className="h-9 min-w-0 flex-1 border border-slate-700 bg-[#090d17] px-2 text-xs text-slate-200 outline-none focus:border-emerald-300"><option value="" disabled>Select workspace</option>{projects.data?.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select><Button size="icon" variant="outline" className="size-9 rounded-none border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800" onClick={() => document.getElementById("project-name")?.focus()}><Plus className="size-4" /></Button></div>
@@ -144,9 +146,11 @@ export default function Home() {
             </aside>
           </div>
 
-          <section className="border-t border-emerald-300/20 bg-[#080c16] p-3 sm:p-4">
+          {activeRun ? <section className="border-t border-slate-700/80 bg-[#0a0f1d] p-3 sm:p-4"><div className="mx-auto max-w-5xl border border-slate-700/80 bg-[#0d1324] p-3 text-[11px]"><div className="flex flex-wrap items-center gap-2"><span className={cn("font-semibold", statusTone[activeRun.status])}>[{activeRun.status.replaceAll("_", " ")}]</span><span className="text-slate-500">input: {activeRun.inputLanguage}</span><span className="text-slate-600">run #{activeRun.id}</span></div><p className="mt-2 whitespace-pre-wrap leading-5 text-slate-200">{activeRun.assistantResponse}</p><div className="mt-3 flex flex-wrap gap-2">{activeRun.status === "planned" ? <TerminalButton accent disabled={generate.isPending} onClick={() => generate.mutate({ runId: activeRun.id })}>{generate.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Braces className="size-3.5" />}Generate code proposal</TerminalButton> : null}{activeRun.status === "failed" ? <TerminalButton accent disabled={requestRepair.isPending} onClick={() => requestRepair.mutate({ runId: activeRun.id })}>{requestRepair.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}Repair from logs</TerminalButton> : null}{activeRun.status === "needs_approval" ? <span className="text-amber-300">Approval required before code generation.</span> : null}</div></div></section> : null}
+          </div>
+
+          <section className="shrink-0 border-t border-emerald-300/20 bg-[#080c16] p-3 sm:p-4">
             <div className="mb-3 flex items-center justify-between gap-3"><div><p className="flex items-center gap-2 text-xs font-bold text-emerald-300"><Play className="size-3.5" />Command Center</p><p className="mt-1 text-[10px] text-slate-500">Describe the complete coding task in any language. SynapseX reads the full request before it plans changes.</p></div><span className="hidden text-[10px] text-slate-600 sm:block">Ctrl / Cmd + Enter to run</span></div>
-            {activeRun ? <div className="mb-3 border border-slate-700/80 bg-[#0d1324] p-3 text-[11px]"><div className="flex flex-wrap items-center gap-2"><span className={cn("font-semibold", statusTone[activeRun.status])}>[{activeRun.status.replaceAll("_", " ")}]</span><span className="text-slate-500">input: {activeRun.inputLanguage}</span></div><p className="mt-2 whitespace-pre-wrap leading-5 text-slate-200">{activeRun.assistantResponse}</p><div className="mt-3 flex flex-wrap gap-2">{activeRun.status === "planned" ? <TerminalButton accent disabled={generate.isPending} onClick={() => generate.mutate({ runId: activeRun.id })}>{generate.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Braces className="size-3.5" />}Generate code proposal</TerminalButton> : null}{activeRun.status === "failed" ? <TerminalButton accent disabled={requestRepair.isPending} onClick={() => requestRepair.mutate({ runId: activeRun.id })}>{requestRepair.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}Repair from logs</TerminalButton> : null}{activeRun.status === "needs_approval" ? <span className="text-amber-300">Approval required before code generation.</span> : null}</div></div> : null}
             <div className="flex items-stretch border border-emerald-300/30 bg-[#0d1324] focus-within:border-emerald-300"><div className="flex w-12 shrink-0 items-start justify-center pt-4 text-emerald-300">PS&gt;</div><Textarea value={command} onChange={event => setCommand(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); runCommand(); } }} placeholder="Assign any coding task…" className="min-h-24 flex-1 resize-y rounded-none border-0 bg-transparent px-0 py-3 font-mono text-xs leading-6 text-slate-100 shadow-none focus-visible:ring-0" /><Button onClick={runCommand} disabled={!activeProjectId || !command.trim() || analyze.isPending} className="m-2 h-auto rounded-none bg-emerald-300 px-4 text-[#07100e] hover:bg-emerald-200">{analyze.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}</Button></div>
           </section>
         </div>

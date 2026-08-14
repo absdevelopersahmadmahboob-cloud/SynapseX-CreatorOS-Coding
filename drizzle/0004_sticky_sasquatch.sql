@@ -1,0 +1,1 @@
+ALTER TABLE `coding_runs` MODIFY COLUMN `status` enum('planned','awaiting_review','verifying','unverified','passed','failed','needs_approval') NOT NULL;

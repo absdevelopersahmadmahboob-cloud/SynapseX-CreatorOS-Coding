@@ -14,8 +14,14 @@
 - [x] Add GitHub-ready README, .gitignore, setup guide, and environment variable documentation.
 - [x] Add integration coverage for runner result logs, repair proposals, and approval-gated destructive/live actions.
 - [x] Perform desktop and mobile visual verification.
-- [ ] Prepare a final checkpoint and GitHub handoff guidance.
+- [x] Prepare a final checkpoint and GitHub handoff guidance.
 - [x] Push the SynapseX CreatorOS Coding source to the provided GitHub repository and verify the remote.
 - [x] Rename the product to SynapseX CreatorOS Coding across the interface and repository documentation.
 - [x] Replace the dashboard-style workspace with one focused PowerShell-style terminal screen and an integrated Command Center.
 - [x] Rename remaining repository documentation and GitHub publishing text to SynapseX CreatorOS Coding.
+- [x] Keep the Command Center input fixed at the bottom of the viewport while the workspace output scrolls above it.
+- [x] Verify the fixed Command Center layout on desktop and mobile viewports.
+- [x] Document runner purpose, optionality, and free deployment alternatives in Roman Urdu.
+- [x] Mark accepted code as unverified instead of failed when no isolated runner is configured.
+- [x] Remove the conflicting explicit pnpm version from the GitHub Actions workflow and verify CI passes.
+- [ ] Make the GitHub publish script safely update an existing main branch before syncing the CI fix.

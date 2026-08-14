@@ -33,7 +33,7 @@ export const codingRuns = mysqlTable("coding_runs", {
   deliverable: text("deliverable").notNull(),
   taskJson: text("taskJson").notNull(),
   assistantResponse: text("assistantResponse").notNull(),
-  status: mysqlEnum("status", ["planned", "awaiting_review", "verifying", "passed", "failed", "needs_approval"]).notNull(),
+  status: mysqlEnum("status", ["planned", "awaiting_review", "verifying", "unverified", "passed", "failed", "needs_approval"]).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

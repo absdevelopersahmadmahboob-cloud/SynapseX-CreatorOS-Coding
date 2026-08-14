@@ -32,6 +32,8 @@ pnpm build
 
 SynapseX CreatorOS Coding records and displays type-check, lint, build, and test jobs after a reviewed change set is accepted. Actual arbitrary-code execution must run in an isolated runner, never inside the application server. See [`docs/EXECUTION-RUNNER.md`](docs/EXECUTION-RUNNER.md) for the runner contract and GitHub Actions example.
 
+Runner ki zarurat, optionality, zero-extra-server launch flow aur Roman Urdu setup ke liye [`docs/RUNNER-GUIDE-ROMAN-URDU.md`](docs/RUNNER-GUIDE-ROMAN-URDU.md) dekhein.
+
 See [`docs/SETUP.md`](docs/SETUP.md) for the environment-variable reference.
 
 ## Deployment

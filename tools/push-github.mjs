@@ -71,16 +71,17 @@ const createdTree = await github(`/repos/${owner}/${repo}/git/trees`, {
 });
 
 const sourceHash = createHash("sha256").update(tree.map(entry => `${entry.path}:${entry.sha}`).join("\n")).digest("hex").slice(0, 12);
+const currentMain = await github(`/repos/${owner}/${repo}/git/ref/heads/main`);
 const commit = await github(`/repos/${owner}/${repo}/git/commits`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ message: `feat: initialize SynapseX CreatorOS Coding (${sourceHash})`, tree: createdTree.sha }),
+  body: JSON.stringify({ message: `chore: sync SynapseX CreatorOS Coding (${sourceHash})`, tree: createdTree.sha, parents: [currentMain.object.sha] }),
 });
 
-await github(`/repos/${owner}/${repo}/git/refs`, {
-  method: "POST",
+await github(`/repos/${owner}/${repo}/git/refs/heads/main`, {
+  method: "PATCH",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ ref: "refs/heads/main", sha: commit.sha }),
+  body: JSON.stringify({ sha: commit.sha, force: false }),
 });
 
 console.log(`Published ${files.length} tracked files to https://github.com/${owner}/${repo}/tree/main`);

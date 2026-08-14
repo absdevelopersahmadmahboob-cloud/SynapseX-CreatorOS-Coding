@@ -82,7 +82,7 @@ export async function getCodingRun(ownerId: number, runId: number) {
   return result[0];
 }
 
-export async function updateCodingRun(runId: number, values: { status?: "planned" | "awaiting_review" | "verifying" | "passed" | "failed" | "needs_approval"; assistantResponse?: string }) {
+export async function updateCodingRun(runId: number, values: { status?: "planned" | "awaiting_review" | "verifying" | "unverified" | "passed" | "failed" | "needs_approval"; assistantResponse?: string }) {
   const db = await requireDb();
   await db.update(codingRuns).set(values).where(eq(codingRuns.id, runId));
 }
@@ -166,7 +166,7 @@ export async function recordRunnerUnavailable(ownerId: number, runId: number, re
   const run = await getCodingRun(ownerId, runId);
   if (!run) return false;
   await db.update(verificationRuns).set({ status: "skipped", logText: reason, completedAt: new Date() }).where(and(eq(verificationRuns.runId, runId), eq(verificationRuns.status, "queued")));
-  await updateCodingRun(runId, { status: "failed", assistantResponse: "Isolated verification runner available nahin tha, is liye code ko verified nahin kaha ja sakta. Runner configure karke changes dobara verify karein." });
+  await updateCodingRun(runId, { status: "unverified", assistantResponse: "Changes apply ho gayi hain, lekin isolated verification runner configured nahin tha. Is liye code ko verified nahin kaha ja sakta; aap manual review kar sakte hain ya baad mein runner connect kar sakte hain." });
   return true;
 }
 
