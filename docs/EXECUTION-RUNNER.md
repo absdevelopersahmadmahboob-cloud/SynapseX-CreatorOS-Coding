@@ -1,6 +1,6 @@
 # Isolated Verification Runner Contract
 
-CodeForge must not run arbitrary workspace code inside its web-server process. A project can contain any programming language, package, toolchain, or task, so verification needs a disposable isolated runner.
+SynapseX CreatorOS Coding must not run arbitrary workspace code inside its web-server process. A project can contain any programming language, package, toolchain, or task, so verification needs a disposable isolated runner.
 
 ## Required request contract
 
@@ -23,5 +23,4 @@ For GitHub-connected projects, configure the workflow in `.github/workflows/veri
 
 ## Production rule
 
-Never mark a check as passed until an isolated runner has returned a successful result. Until then CodeForge keeps verification in the `queued` state and shows the recorded runner log.
-
+Never mark a check as passed until an isolated runner has returned a successful result. Until then SynapseX CreatorOS Coding keeps verification in the `queued` state and shows the recorded runner log.

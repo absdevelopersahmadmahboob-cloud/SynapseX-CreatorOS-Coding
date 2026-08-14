@@ -1,6 +1,6 @@
-# CodeForge Workspace
+# SynapseX CreatorOS Coding
 
-CodeForge Workspace is a controlled, universal coding-assistant platform. It accepts development tasks in any natural language, interprets the complete request before planning work, and always writes assistant-facing explanations in Roman Urdu.
+SynapseX CreatorOS Coding is a controlled, universal coding-assistant platform. It accepts development tasks in any natural language, interprets the complete request before planning work, and always writes assistant-facing explanations in Roman Urdu.
 
 ## What it does
 
@@ -30,7 +30,7 @@ pnpm build
 
 ## Verification execution
 
-CodeForge records and displays type-check, lint, build, and test jobs after a reviewed change set is accepted. Actual arbitrary-code execution must run in an isolated runner, never inside the application server. See [`docs/EXECUTION-RUNNER.md`](docs/EXECUTION-RUNNER.md) for the runner contract and GitHub Actions example.
+SynapseX CreatorOS Coding records and displays type-check, lint, build, and test jobs after a reviewed change set is accepted. Actual arbitrary-code execution must run in an isolated runner, never inside the application server. See [`docs/EXECUTION-RUNNER.md`](docs/EXECUTION-RUNNER.md) for the runner contract and GitHub Actions example.
 
 See [`docs/SETUP.md`](docs/SETUP.md) for the environment-variable reference.
 

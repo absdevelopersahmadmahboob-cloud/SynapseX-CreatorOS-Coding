@@ -1,6 +1,6 @@
 # Setup and Environment Configuration
 
-CodeForge is deployed with platform-managed configuration. Configure environment values through your hosting provider or project settings; do not commit a local environment file containing credentials.
+SynapseX CreatorOS Coding is deployed with platform-managed configuration. Configure environment values through your hosting provider or project settings; do not commit a local environment file containing credentials.
 
 | Variable | Purpose | Required |
 |---|---|---|
@@ -13,6 +13,6 @@ CodeForge is deployed with platform-managed configuration. Configure environment
 | `VITE_OAUTH_PORTAL_URL` | OAuth portal endpoint | Yes |
 | `CODE_RUNNER_URL` | Optional isolated verification-runner endpoint | Required before real user-code execution |
 | `CODE_RUNNER_TOKEN` | Optional short-lived runner authentication token | Required with `CODE_RUNNER_URL` |
+| `SYNAPSEX_GITHUB_REPOSITORY` | GitHub repository in `owner/repository` format | Required for repository publishing |
 
 For a local or alternate deployment, substitute equivalents for authentication, object storage, database access, and the language-model provider. Never expose server-side keys in browser code.
-
