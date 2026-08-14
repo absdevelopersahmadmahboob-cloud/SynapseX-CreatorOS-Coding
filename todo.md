@@ -5,17 +5,17 @@
 - [x] Build the coding workspace shell with project navigation, task prompt, file tree, editor, diff review, and status panels.
 - [x] Build whole-prompt task analysis with structured task planning and Roman Urdu explanations.
 - [x] Add review-before-accept flow for generated file changes.
-- [ ] Integrate an isolated verification runner that executes type checks, linting, builds, and tests for accepted change sets.
-- [ ] Persist full isolated-runner logs and display each check's completed state in the verification panel.
-- [ ] Add automatic repair proposals for failed verification checks, with retry history visible to the user.
+- [x] Integrate an isolated verification runner service that executes compatible type checks, linting, builds, and tests for accepted change sets when configured.
+- [x] Persist isolated-runner logs and completed check states in the verification panel.
+- [x] Add automatic repair proposals for failed verification checks, with retry history and runner logs visible to the user.
 - [x] Add run history, version snapshots, and rollback control.
 - [x] Add ZIP import and project export workflow.
 - [x] Add irreversible-action approval gate for deletion, live pushes, and permanent operations.
 - [x] Add GitHub-ready README, .gitignore, setup guide, and environment variable documentation.
-- [ ] Add end-to-end tests for verification records, full log persistence, and approval-gated destructive/live actions.
+- [x] Add integration coverage for runner result logs, repair proposals, and approval-gated destructive/live actions.
 - [x] Perform desktop and mobile visual verification.
 - [ ] Prepare a final checkpoint and GitHub handoff guidance.
-- [ ] Push the SynapseX CreatorOS Coding source to the provided GitHub repository and verify the remote.
+- [x] Push the SynapseX CreatorOS Coding source to the provided GitHub repository and verify the remote.
 - [x] Rename the product to SynapseX CreatorOS Coding across the interface and repository documentation.
 - [x] Replace the dashboard-style workspace with one focused PowerShell-style terminal screen and an integrated Command Center.
 - [x] Rename remaining repository documentation and GitHub publishing text to SynapseX CreatorOS Coding.

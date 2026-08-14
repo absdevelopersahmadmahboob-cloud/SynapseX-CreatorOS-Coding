@@ -3,6 +3,8 @@ import { z } from "zod";
 import * as db from "../db";
 import { parseCodingTask, proposeCodeChanges } from "../services/coding/taskParser";
 import { approvalMessage } from "../services/coding/approvalPolicy";
+import { executeIsolatedVerification } from "../services/coding/verificationRunner";
+import { buildVerificationRepairPrompt } from "../services/coding/repairProposal";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const projectInput = z.object({ name: z.string().trim().min(1).max(120) });
@@ -82,6 +84,15 @@ export const codingRouter = router({
     const result = await db.acceptFileChanges(ctx.user.id, input.runId);
     if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
     if (result.requiresApproval) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Deletion requires explicit approval before accepting this change set" });
+    const run = await db.getCodingRun(ctx.user.id, input.runId);
+    if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
+    try {
+      const verification = await executeIsolatedVerification({ runId: run.id, files: await db.listWorkspaceFiles(ctx.user.id, run.projectId) });
+      if (!verification.configured) await db.recordRunnerUnavailable(ctx.user.id, run.id, "CODE_RUNNER_URL aur CODE_RUNNER_TOKEN configure nahin hain; isolated verification execute nahin hui.");
+      else await db.recordVerificationOutcome({ ownerId: ctx.user.id, runId: run.id, checks: verification.checks });
+    } catch (error) {
+      await db.recordRunnerUnavailable(ctx.user.id, run.id, `Isolated verification runner error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
     return result;
   }),
 
@@ -89,6 +100,28 @@ export const codingRouter = router({
     const rejected = await db.rejectFileChanges(ctx.user.id, input.runId);
     if (!rejected) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
     return { success: true };
+  }),
+
+  requestRepair: protectedProcedure.input(z.object({ runId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const run = await db.getCodingRun(ctx.user.id, input.runId);
+    if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
+    const verification = await db.listVerificationRuns(ctx.user.id, run.id);
+    const failures = verification.filter(check => check.status === "failed").map(check => ({ checkType: check.checkType, logText: check.logText }));
+    if (!failures.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No failed verification result is available for repair" });
+    const files = await db.listWorkspaceFiles(ctx.user.id, run.projectId);
+    const proposal = await proposeCodeChanges({ userPrompt: buildVerificationRepairPrompt({ originalPrompt: run.prompt, failures }), taskJson: run.taskJson, files });
+    const existingFiles = new Map(files.map(file => [file.path, file]));
+    const changes = proposal.changes.map(change => ({
+      path: change.path,
+      operation: change.operation,
+      previousContent: existingFiles.get(change.path)?.content ?? null,
+      nextContent: change.content,
+      diffText: makeDiff(change.path, existingFiles.get(change.path)?.content ?? null, change.content),
+    }));
+    if (changes.some(change => change.operation === "delete")) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Repair proposal included a deletion and requires a new reviewed proposal" });
+    await db.replacePendingFileChanges({ ownerId: ctx.user.id, runId: run.id, changes });
+    await db.updateCodingRun(run.id, { status: "awaiting_review", assistantResponse: proposal.romanUrduResponse });
+    return proposal;
   }),
 
   listApprovals: protectedProcedure.input(z.object({ projectId: z.number().int().positive() })).query(({ ctx, input }) => db.listOpenApprovalRequests(ctx.user.id, input.projectId)),

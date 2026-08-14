@@ -129,7 +129,6 @@ export async function queueVerification(ownerId: number, runId: number) {
   const db = await requireDb();
   const run = await getCodingRun(ownerId, runId);
   if (!run) return false;
-  await db.delete(verificationRuns).where(eq(verificationRuns.runId, runId));
   await db.insert(verificationRuns).values([
     { runId, checkType: "typecheck", status: "queued", logText: "Queued for isolated verification runner." },
     { runId, checkType: "lint", status: "queued", logText: "Queued for isolated verification runner." },
@@ -144,6 +143,31 @@ export async function listVerificationRuns(ownerId: number, runId: number) {
   const run = await getCodingRun(ownerId, runId);
   if (!run) return [];
   return db.select().from(verificationRuns).where(eq(verificationRuns.runId, runId)).orderBy(asc(verificationRuns.id));
+}
+
+export async function recordVerificationOutcome(input: { ownerId: number; runId: number; checks: Array<{ checkType: "typecheck" | "lint" | "build" | "test"; status: "passed" | "failed" | "skipped"; logText: string }> }) {
+  const db = await requireDb();
+  const run = await getCodingRun(input.ownerId, input.runId);
+  if (!run) return false;
+  for (const check of input.checks) {
+    await db.update(verificationRuns).set({ status: check.status, logText: check.logText, completedAt: new Date() }).where(and(eq(verificationRuns.runId, input.runId), eq(verificationRuns.checkType, check.checkType), eq(verificationRuns.status, "queued")));
+  }
+  const failed = input.checks.some(check => check.status === "failed");
+  const passed = input.checks.length > 0 && input.checks.every(check => check.status === "passed" || check.status === "skipped");
+  await updateCodingRun(input.runId, {
+    status: failed ? "failed" : passed ? "passed" : "verifying",
+    assistantResponse: failed ? "Isolated verification mein kam az kam aik check fail hua hai. Neeche log dekh kar repair proposal mangwayein." : passed ? "Isolated verification complete ho gayi hai. Available checks ka nateeja record ho chuka hai." : "Isolated verification abhi mukammal nahin hui.",
+  });
+  return true;
+}
+
+export async function recordRunnerUnavailable(ownerId: number, runId: number, reason: string) {
+  const db = await requireDb();
+  const run = await getCodingRun(ownerId, runId);
+  if (!run) return false;
+  await db.update(verificationRuns).set({ status: "skipped", logText: reason, completedAt: new Date() }).where(and(eq(verificationRuns.runId, runId), eq(verificationRuns.status, "queued")));
+  await updateCodingRun(runId, { status: "failed", assistantResponse: "Isolated verification runner available nahin tha, is liye code ko verified nahin kaha ja sakta. Runner configure karke changes dobara verify karein." });
+  return true;
 }
 
 export async function replacePendingFileChanges(input: { ownerId: number; runId: number; changes: Array<{ path: string; operation: "create" | "update" | "delete"; previousContent: string | null; nextContent: string | null; diffText: string }> }) {
