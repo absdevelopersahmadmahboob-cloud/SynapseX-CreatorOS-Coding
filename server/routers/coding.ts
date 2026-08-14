@@ -5,6 +5,7 @@ import { parseCodingTask, proposeCodeChanges } from "../services/coding/taskPars
 import { approvalMessage } from "../services/coding/approvalPolicy";
 import { executeIsolatedVerification } from "../services/coding/verificationRunner";
 import { buildVerificationRepairPrompt } from "../services/coding/repairProposal";
+import { applyApprovedSelfImprovement, assertSelfImprovementChanges, readSelfImprovementSource } from "../services/coding/selfImprovement";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const projectInput = z.object({ name: z.string().trim().min(1).max(120) });
@@ -49,6 +50,30 @@ export const codingRouter = router({
     });
     if (task.confirmationRequired && task.confirmationReason) await db.createApprovalRequest({ runId: run.id, actionType: "permanent_operation", description: task.confirmationReason });
     return { run, task };
+  }),
+
+  selfImprove: protectedProcedure.input(z.object({ prompt: z.string().trim().min(10).max(12000) })).mutation(async ({ ctx, input }) => {
+    const projectName = "synapsex-self-improvement";
+    const project = (await db.listCodingProjects(ctx.user.id)).find(item => item.name === projectName)
+      ?? await db.createCodingProject({ ownerId: ctx.user.id, name: projectName });
+    const sourceFiles = await readSelfImprovementSource();
+    const task = {
+      inputLanguage: "unknown", taskType: "self-improvement", executionMode: "propose_code" as const, deliverableKind: "other" as const, localScriptKind: "none" as const,
+      deliverable: "SynapseX source improvement proposal", scope: ["Allowed SynapseX application source"],
+      implementationPlan: ["Restricted source proposal banana", "Diff review aur explicit approval lena", "Approval ke baad local checks chalana"], verificationPlan: ["pnpm check", "pnpm test"],
+      confirmationRequired: true, confirmationReason: "SynapseX ke apne source code mein change ke liye explicit approval zaroori hai.",
+      romanUrduResponse: "SynapseX improvement proposal tayar ho raha hai. Koi apna source code approval ke baghair change nahin hoga.", selfImprovement: true,
+    };
+    const proposal = await proposeCodeChanges({
+      userPrompt: `SynapseX CreatorOS Coding ke apne allowed source ko improve karo. User ka improvement brief: ${input.prompt}\n\nSirf functional source change propose karo. Secrets, deployment config, dependencies aur source deletion allowed nahin hain.`,
+      taskJson: JSON.stringify(task), files: sourceFiles,
+    });
+    assertSelfImprovementChanges(proposal.changes);
+    const run = await db.createCodingRun({ projectId: project.id, ownerId: ctx.user.id, prompt: input.prompt, inputLanguage: task.inputLanguage, taskType: task.taskType, deliverable: task.deliverable, taskJson: JSON.stringify(task), assistantResponse: proposal.romanUrduResponse, status: "needs_approval" });
+    const existingFiles = new Map(sourceFiles.map(file => [file.path, file]));
+    await db.replacePendingFileChanges({ ownerId: ctx.user.id, runId: run.id, changes: proposal.changes.map(change => ({ path: change.path, operation: change.operation, previousContent: existingFiles.get(change.path)?.content ?? null, nextContent: change.content, diffText: makeDiff(change.path, existingFiles.get(change.path)?.content ?? null, change.content) })) });
+    await db.createApprovalRequest({ runId: run.id, actionType: "permanent_operation", description: "SynapseX ke allowed source diff ko apply karna hai. Approval ke baad pnpm check aur pnpm test chalenge; fail hone par source rollback hoga." });
+    return { run, proposal };
   }),
 
   listChanges: protectedProcedure.input(z.object({ runId: z.number().int().positive() })).query(({ ctx, input }) => db.listFileChanges(ctx.user.id, input.runId)),
@@ -102,6 +127,25 @@ export const codingRouter = router({
     return { success: true };
   }),
 
+  acceptSelfImprovement: protectedProcedure.input(z.object({ runId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const run = await db.getCodingRun(ctx.user.id, input.runId);
+    if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
+    const storedTask = JSON.parse(run.taskJson) as { task?: { selfImprovement?: boolean } };
+    if (!storedTask.task?.selfImprovement) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This run is not a self-improvement proposal" });
+    if (run.status !== "awaiting_review") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Explicit approval is required before applying a self-improvement proposal" });
+    const changes = await db.listFileChanges(ctx.user.id, run.id);
+    const result = await applyApprovedSelfImprovement(changes.filter(change => change.reviewStatus === "pending").map(change => ({ path: change.path, operation: change.operation, content: change.nextContent, rationale: "Approved self-improvement diff" })));
+    const logText = `pnpm check\n${result.checks.typecheck.log}\n\npnpm test\n${result.checks.tests.log}`;
+    if (result.applied) {
+      await db.acceptPendingFileChanges(ctx.user.id, run.id);
+      await db.recordCustomVerification({ ownerId: ctx.user.id, runId: run.id, passed: true, logText, assistantResponse: "Approved self-improvement source changes apply ho gayi hain aur local typecheck aur tests pass ho gaye hain." });
+    } else {
+      await db.rejectFileChanges(ctx.user.id, run.id);
+      await db.recordCustomVerification({ ownerId: ctx.user.id, runId: run.id, passed: false, logText, assistantResponse: "Self-improvement checks fail huay, is liye proposed source changes rollback kar di gayi hain. Logs review karke naya proposal mangwayein." });
+    }
+    return result;
+  }),
+
   requestRepair: protectedProcedure.input(z.object({ runId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
     const run = await db.getCodingRun(ctx.user.id, input.runId);
     if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
@@ -130,6 +174,7 @@ export const codingRouter = router({
     const approval = await db.resolveApprovalRequest(ctx.user.id, input.approvalId, input.approved);
     if (!approval) throw new TRPCError({ code: "NOT_FOUND", message: "Approval request not found" });
     if (approval.actionType === "delete_file" && input.approved) await db.updateCodingRun(approval.runId, { status: "awaiting_review" });
+    if (approval.actionType === "permanent_operation" && input.approved) await db.updateCodingRun(approval.runId, { status: "awaiting_review" });
     if (!input.approved) await db.updateCodingRun(approval.runId, { status: "planned" });
     return approval;
   }),

@@ -24,5 +24,24 @@
 - [x] Document runner purpose, optionality, and free deployment alternatives in Roman Urdu.
 - [x] Mark accepted code as unverified instead of failed when no isolated runner is configured.
 - [x] Remove the conflicting explicit pnpm version from the GitHub Actions workflow and verify CI passes.
-- [ ] Make the GitHub publish script safely update an existing main branch before syncing the CI fix.
-- [x] Remove CI test dependencies on private runtime environment variables and GitHub credentials.
+- [x] Make the GitHub publish script safely update an existing main branch before syncing the CI fix.
+- [x] Remove default test-suite dependencies on private runtime environment variables, GitHub credentials, and external network availability.
+- [x] Fix Command Center prompt submission so typed tasks automatically create a workspace when needed and display a coding run.
+- [x] Parse raw or Markdown-fenced LLM JSON safely so task analysis does not fail at Command Center submission.
+- [x] Apply safe defaults when the LLM omits non-critical task-plan fields instead of failing Command Center submission.
+- [x] Normalize ambiguous but valid coding commands such as open folder into a reviewable planned task instead of invalid-request.
+- [x] Add a Roman Urdu in-app Command Center usage guide that explains all available workspace controls and safe command examples.
+- [x] Replace legacy invalid task response text with clear browser-safe folder import guidance in the activity output.
+- [x] Recover safely from malformed LLM structured output so imported-code bug analysis can be planned without applying fixes.
+- [x] Keep long pasted prompts and generated responses readable within a dedicated scrollable history area without hiding the fixed Command Center input.
+- [x] Diagnose fetch failures and show a clear retryable network status instead of an opaque tRPC error.
+- [x] Make prompt-driven code creation, reviewed proposal generation, and approved change application explicit in the Command Center workflow.
+- [x] Build a prompt-driven backend project scaffold workflow that creates a runnable website workspace and preview without requiring the user to write terminal commands.
+- [x] Add a controlled self-improvement proposal flow that creates diffs, runs checks, and requires explicit approval before changing SynapseX itself.
+- [x] Replace the over-broad legacy folder fallback with a neutral planned-coding response for invalid parser labels.
+- [x] Automatically generate a reviewed code proposal when a complete prompt requests website, application, script, or implementation creation.
+- [x] Generate safe local PowerShell or shell scripts as workspace files for device-level file and folder requests rather than treating them as invalid.
+- [x] Add a local static HTML preview for accepted website workspace files.
+- [x] Validate website scaffold proposals include a previewable HTML entry file before review.
+- [x] Validate PC file or folder task proposals include the requested local PowerShell or shell script before review.
+- [x] Prevent persisted legacy folder-specific activity responses from overriding the neutral planned-coding wording.

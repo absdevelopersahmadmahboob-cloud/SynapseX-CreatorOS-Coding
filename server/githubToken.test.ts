@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 describe("GitHub publishing credential", () => {
-  it.skipIf(!process.env.GH_TOKEN)("authenticates with the configured GitHub token", async () => {
+  it.skipIf(process.env.RUN_GITHUB_CREDENTIAL_TEST !== "true" || !process.env.GH_TOKEN)("authenticates with the configured GitHub token", async () => {
     const token = process.env.GH_TOKEN;
     if (!token) throw new Error("GH_TOKEN is required for this opt-in credential validation.");
 

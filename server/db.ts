@@ -179,6 +179,23 @@ export async function replacePendingFileChanges(input: { ownerId: number; runId:
   return true;
 }
 
+export async function acceptPendingFileChanges(ownerId: number, runId: number) {
+  const db = await requireDb();
+  const run = await getCodingRun(ownerId, runId);
+  if (!run) return false;
+  await db.update(codingFileChanges).set({ reviewStatus: "accepted" }).where(and(eq(codingFileChanges.runId, runId), eq(codingFileChanges.reviewStatus, "pending")));
+  return true;
+}
+
+export async function recordCustomVerification(input: { ownerId: number; runId: number; passed: boolean; logText: string; assistantResponse: string }) {
+  const db = await requireDb();
+  const run = await getCodingRun(input.ownerId, input.runId);
+  if (!run) return false;
+  await db.insert(verificationRuns).values({ runId: input.runId, checkType: "custom", status: input.passed ? "passed" : "failed", logText: input.logText, completedAt: new Date() });
+  await updateCodingRun(input.runId, { status: input.passed ? "passed" : "failed", assistantResponse: input.assistantResponse });
+  return true;
+}
+
 export async function createApprovalRequest(input: { runId: number; actionType: "delete_file" | "push_live" | "permanent_operation"; description: string }) {
   const db = await requireDb();
   await db.insert(approvalRequests).values(input);

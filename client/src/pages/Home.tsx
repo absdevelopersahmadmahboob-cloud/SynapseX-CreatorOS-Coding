@@ -3,12 +3,15 @@ import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
+import { getCommandSubmissionError, submitCodingCommand } from "@/lib/commandSubmission";
+import { buildStaticPreview } from "@/lib/staticPreview";
 import JSZip from "jszip";
 import { toast } from "sonner";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Braces, Check, ChevronDown, CircleDot, Download, FileCode2, FilePlus2, GitBranch, History, Loader2, LockKeyhole, Play, Plus, RotateCcw, Save, Send, ShieldCheck, TerminalSquare, Upload } from "lucide-react";
+import { Braces, Check, ChevronDown, CircleDot, Download, Eye, FileCode2, FilePlus2, GitBranch, HelpCircle, History, Loader2, LockKeyhole, Play, Plus, RotateCcw, Save, Send, ShieldCheck, TerminalSquare, Upload } from "lucide-react";
 
 type WorkspaceFile = { id: number; path: string; content: string; language: string };
 type FileChange = { id: number; path: string; operation: "create" | "update" | "delete"; previousContent: string | null; nextContent: string | null; diffText: string; reviewStatus: "pending" | "accepted" | "rejected" };
@@ -35,7 +38,13 @@ export default function Home() {
   const [command, setCommand] = useState("");
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [selfImproveMode, setSelfImproveMode] = useState(false);
   const archiveInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
+  const outputRef = useRef<HTMLDivElement>(null);
 
   const projects = trpc.coding.listProjects.useQuery(undefined, { enabled: isAuthenticated });
   const files = trpc.coding.listFiles.useQuery({ projectId: activeProjectId ?? 0 }, { enabled: isAuthenticated && !!activeProjectId });
@@ -53,26 +62,51 @@ export default function Home() {
   const activeFile = useMemo(() => files.data?.find(file => file.path === activeFilePath) as WorkspaceFile | undefined, [files.data, activeFilePath]);
   const activeRun = useMemo(() => runs.data?.find(run => run.id === activeRunId) ?? runs.data?.[0], [runs.data, activeRunId]);
   const activeChange = useMemo(() => changes.data?.find(change => change.reviewStatus === "pending") as FileChange | undefined, [changes.data]);
+  const previewDocument = useMemo(() => buildStaticPreview(files.data ?? []), [files.data]);
   useEffect(() => setDraft(activeFile?.content ?? ""), [activeFile?.path, activeFile?.content]);
+  useEffect(() => { if (activeRunId) outputRef.current?.scrollTo({ top: 0, behavior: "smooth" }); }, [activeRunId]);
 
   const createProject = trpc.coding.createProject.useMutation({ onSuccess: async result => { await utils.coding.listProjects.invalidate(); setActiveProjectId(result.id); setProjectName(""); toast.success("Workspace created"); }, onError: error => toast.error(error.message) });
   const saveFile = trpc.coding.saveFile.useMutation({ onSuccess: async result => { await utils.coding.listFiles.invalidate(); setActiveFilePath(result.path); toast.success("File saved"); }, onError: error => toast.error(error.message) });
-  const analyze = trpc.coding.analyzeTask.useMutation({ onSuccess: async result => { await Promise.all([utils.coding.listRuns.invalidate(), utils.coding.listApprovals.invalidate()]); setActiveRunId(result.run.id); setCommand(""); }, onError: error => toast.error(error.message) });
+  const analyze = trpc.coding.analyzeTask.useMutation({ onSuccess: async result => { await Promise.all([utils.coding.listRuns.invalidate(), utils.coding.listApprovals.invalidate()]); setActiveRunId(result.run.id); setSubmissionError(null); setCommand(""); }, onError: error => toast.error(error.message) });
   const generate = trpc.coding.generateChanges.useMutation({ onSuccess: async () => { await Promise.all([utils.coding.listRuns.invalidate(), utils.coding.listChanges.invalidate()]); toast.success("Code proposal ready"); }, onError: error => toast.error(error.message) });
   const accept = trpc.coding.acceptChanges.useMutation({ onSuccess: async () => { await Promise.all([utils.coding.listFiles.invalidate(), utils.coding.listRuns.invalidate(), utils.coding.listChanges.invalidate(), utils.coding.listVerification.invalidate(), utils.coding.listSnapshots.invalidate()]); toast.success("Changes accepted"); }, onError: error => toast.error(error.message) });
   const reject = trpc.coding.rejectChanges.useMutation({ onSuccess: async () => { await Promise.all([utils.coding.listRuns.invalidate(), utils.coding.listChanges.invalidate()]); toast.success("Changes rejected"); }, onError: error => toast.error(error.message) });
   const requestRepair = trpc.coding.requestRepair.useMutation({ onSuccess: async () => { await Promise.all([utils.coding.listRuns.invalidate(), utils.coding.listChanges.invalidate()]); toast.success("Repair proposal ready"); }, onError: error => toast.error(error.message) });
   const resolveApproval = trpc.coding.resolveApproval.useMutation({ onSuccess: async () => { await Promise.all([utils.coding.listApprovals.invalidate(), utils.coding.listRuns.invalidate()]); toast.success("Approval decision saved"); }, onError: error => toast.error(error.message) });
   const restore = trpc.coding.restoreSnapshot.useMutation({ onSuccess: async () => { await utils.coding.listFiles.invalidate(); toast.success("Snapshot restored"); }, onError: error => toast.error(error.message) });
+  const selfImprove = trpc.coding.selfImprove.useMutation({ onSuccess: async result => { await Promise.all([utils.coding.listProjects.invalidate(), utils.coding.listRuns.invalidate(), utils.coding.listChanges.invalidate(), utils.coding.listApprovals.invalidate()]); setActiveProjectId(result.run.projectId); setActiveRunId(result.run.id); setCommand(""); setSelfImproveMode(false); toast.success("SynapseX improvement diff review ke liye tayar hai"); }, onError: error => toast.error(error.message) });
+  const acceptSelfImprovement = trpc.coding.acceptSelfImprovement.useMutation({ onSuccess: async result => { await Promise.all([utils.coding.listRuns.invalidate(), utils.coding.listChanges.invalidate(), utils.coding.listVerification.invalidate()]); toast[result.applied ? "success" : "error"](result.applied ? "SynapseX self-improvement checks pass ho gaye" : "Checks fail huay; source rollback ho gaya"); }, onError: error => toast.error(error.message) });
 
   const createFile = () => {
     if (!activeProjectId || !filePath.trim()) return;
     saveFile.mutate({ projectId: activeProjectId, path: filePath.trim(), content: "", language: inferLanguage(filePath.trim()) });
     setFilePath("");
   };
-  const runCommand = () => {
-    if (!activeProjectId) return toast.error("Create a workspace first");
-    if (command.trim()) analyze.mutate({ projectId: activeProjectId, prompt: command.trim() });
+  const runCommand = async () => {
+    if (!command.trim() || analyze.isPending || selfImprove.isPending || createProject.isPending) return;
+    setSubmissionError(null);
+    try {
+      if (selfImproveMode) {
+        await selfImprove.mutateAsync({ prompt: command });
+        return;
+      }
+      const projectId = await submitCodingCommand({
+        activeProjectId,
+        prompt: command,
+        createWorkspace: () => createProject.mutateAsync({ name: `workspace-${new Date().toISOString().slice(0, 10)}` }),
+        analyzeTask: async request => {
+          const result = await analyze.mutateAsync(request);
+          if (result.task.executionMode === "propose_code" && !result.task.confirmationRequired) {
+            await generate.mutateAsync({ runId: result.run.id });
+          }
+          return result;
+        },
+      });
+      if (projectId) setActiveProjectId(projectId);
+    } catch (error) {
+      setSubmissionError(getCommandSubmissionError(error));
+    }
   };
   const importZip = async (archive?: File) => {
     if (!archive || !activeProjectId) return;
@@ -88,6 +122,27 @@ export default function Home() {
     } finally {
       setImporting(false);
       if (archiveInput.current) archiveInput.current.value = "";
+    }
+  };
+  const importFolder = async (selected?: FileList | null) => {
+    if (!selected?.length || !activeProjectId) return;
+    setImporting(true);
+    try {
+      const importable = Array.from(selected).filter(file => {
+        const path = file.webkitRelativePath || file.name;
+        return !file.name.startsWith(".") && !path.includes("/node_modules/") && !path.includes("/.git/");
+      });
+      for (const file of importable) {
+        const path = file.webkitRelativePath || file.name;
+        await saveFile.mutateAsync({ projectId: activeProjectId, path, content: await file.text(), language: inferLanguage(path) });
+      }
+      await utils.coding.listFiles.invalidate();
+      toast.success(`${importable.length} files imported`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Folder import failed");
+    } finally {
+      setImporting(false);
+      if (folderInput.current) folderInput.current.value = "";
     }
   };
   const exportZip = async () => {
@@ -112,13 +167,16 @@ export default function Home() {
     <main className="flex h-dvh flex-col overflow-hidden bg-[#090d17] font-mono text-slate-200 selection:bg-emerald-400/30">
       <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-emerald-300/20 bg-[#0b1020] px-4 sm:px-6">
         <div className="flex items-center gap-3"><div className="flex size-8 items-center justify-center border border-emerald-300/40 bg-emerald-300/10 text-emerald-300"><Braces className="size-4" /></div><div><h1 className="font-sans text-sm font-extrabold tracking-tight text-white">SynapseX CreatorOS Coding</h1><p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">PowerShell Command Center</p></div></div>
-        <div className="flex items-center gap-2"><input ref={archiveInput} className="hidden" type="file" accept=".zip,application/zip" onChange={event => importZip(event.target.files?.[0])} /><TerminalButton onClick={() => archiveInput.current?.click()} disabled={!activeProjectId || importing}><Upload className="size-3.5" />Import</TerminalButton><TerminalButton onClick={exportZip} disabled={!files.data?.length || exporting}><Download className="size-3.5" />Export</TerminalButton><TerminalButton onClick={logout}>Sign out</TerminalButton></div>
+        <div className="flex items-center gap-2"><input ref={archiveInput} className="hidden" type="file" accept=".zip,application/zip" onChange={event => importZip(event.target.files?.[0])} /><input ref={node => { folderInput.current = node; if (node) node.setAttribute("webkitdirectory", ""); }} className="hidden" type="file" multiple onChange={event => importFolder(event.target.files)} /><TerminalButton onClick={() => archiveInput.current?.click()} disabled={!activeProjectId || importing}><Upload className="size-3.5" />ZIP</TerminalButton><TerminalButton onClick={() => folderInput.current?.click()} disabled={!activeProjectId || importing}><FileCode2 className="size-3.5" />Folder</TerminalButton><TerminalButton onClick={() => setPreviewOpen(true)} disabled={!previewDocument}><Eye className="size-3.5" />Preview</TerminalButton><TerminalButton onClick={() => setGuideOpen(true)}><HelpCircle className="size-3.5" />Guide</TerminalButton><TerminalButton onClick={exportZip} disabled={!files.data?.length || exporting}><Download className="size-3.5" />Export</TerminalButton><TerminalButton onClick={logout}>Sign out</TerminalButton></div>
       </header>
+      <Dialog open={guideOpen} onOpenChange={setGuideOpen}><DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto rounded-none border-slate-700 bg-[#0d1324] font-mono text-slate-200"><DialogHeader><DialogTitle className="font-sans text-xl text-emerald-300">Command Center guide</DialogTitle><DialogDescription className="text-slate-400">Har command poori baat likh kar dein; aik lafz par depend na karein.</DialogDescription></DialogHeader><div className="space-y-5 text-sm leading-6 text-slate-300"><section><p className="font-bold text-emerald-300">1. Folder ya ZIP import</p><p>Browser safety ki wajah se prompt likh kar computer ka folder direct open nahin hota. Workspace select karein, phir upar <b>Folder</b> se source folder ya <b>ZIP</b> se archive import karein. `node_modules` aur `.git` import nahin hote.</p></section><section><p className="font-bold text-emerald-300">2. Command kaise deni hai</p><p>Task, expected result aur zaroori context aik hi jumlay mein likhein. Misal: <span className="text-slate-100">"Imported project ko review karo, login error dhoondo, safe fix propose karo aur test steps do."</span></p></section><section><p className="font-bold text-emerald-300">3. Coding workflow</p><p>Website, app, script ya fix banane wali poori request par system reviewed code proposal khud tayar karta hai. Analysis-only request par pehle plan rehta hai. Har proposal ka diff dekhein aur <b>Accept changes</b> se apply karein. Delete, live push ya permanent operation par Approval queue se explicit decision dena hota hai.</p></section><section><p className="font-bold text-emerald-300">4. SynapseX self-improvement</p><p>Command Center ke <b>Improve SynapseX</b> mode se apne source mein functional improvement ka brief dein. System sirf allowed application source ka diff banata hai. Approval ke baad <b>Apply approved improvement</b> local typecheck aur tests chalata hai; koi check fail ho to source rollback hota hai.</p></section><section><p className="font-bold text-emerald-300">5. Baqi controls</p><p>Files list se editor khulta hai, Save manual edit rakhta hai, Activity purane runs dikhati hai, Verification logs dikhata hai, <b>Preview</b> accepted `index.html` website ko isolated window mein dikhata hai, Export workspace ka ZIP banata hai aur Restore latest snapshot rollback karta hai.</p></section></div></DialogContent></Dialog>
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}><DialogContent className="flex h-[85vh] max-w-6xl flex-col gap-3 rounded-none border-slate-700 bg-[#0d1324] p-4 font-mono text-slate-200"><DialogHeader><DialogTitle className="font-sans text-xl text-emerald-300">Website preview</DialogTitle><DialogDescription className="text-slate-400">Yeh accepted workspace ki local `index.html` preview hai; scripts isolated iframe mein chalti hain.</DialogDescription></DialogHeader><iframe title="Accepted workspace website preview" sandbox="allow-scripts" srcDoc={previewDocument ?? ""} className="min-h-0 flex-1 border border-slate-700 bg-white" /></DialogContent></Dialog>
 
       <section className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col p-3 sm:p-5">
         <div className="flex min-h-0 flex-1 flex-col border border-slate-700/80 bg-[#0d1324] shadow-[0_24px_90px_rgba(0,0,0,.35)]">
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-700/80 bg-[#0a0f1d] px-3 py-2 text-[11px] text-slate-400"><TerminalSquare className="size-3.5 text-emerald-300" /><span>PS C:\SynapseX\CreatorOS\Coding</span><span className="hidden text-slate-600 sm:inline">|</span><span className="text-emerald-300">status: ready</span><span className="ml-auto hidden text-slate-500 sm:inline">input: multilingual / output: Roman Urdu</span></div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div ref={outputRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {activeRun ? <section className="border-b border-slate-700/80 bg-[#0a0f1d] p-3 sm:p-4"><div className="mx-auto max-w-5xl border border-slate-700/80 bg-[#0d1324] p-3 text-[11px]"><div className="flex flex-wrap items-center gap-2"><span className={cn("font-semibold", statusTone[activeRun.status])}>[{activeRun.status.replaceAll("_", " ")}]</span><span className="text-slate-500">input: {activeRun.inputLanguage}</span><span className="text-slate-600">run #{activeRun.id}</span></div><p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap pr-2 leading-5 text-slate-200">{displayRunResponse(activeRun)}</p><div className="mt-3 flex flex-wrap gap-2">{activeRun.status === "planned" ? <TerminalButton accent disabled={generate.isPending} onClick={() => generate.mutate({ runId: activeRun.id })}>{generate.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Braces className="size-3.5" />}Generate code proposal</TerminalButton> : null}{activeRun.status === "failed" ? <TerminalButton accent disabled={requestRepair.isPending} onClick={() => requestRepair.mutate({ runId: activeRun.id })}>{requestRepair.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}Repair from logs</TerminalButton> : null}{activeRun.status === "needs_approval" ? <span className="text-amber-300">Approval required before code generation.</span> : null}</div></div></section> : null}
           <div className="grid min-h-[440px] grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_290px]">
             <aside className="border-b border-slate-700/80 p-3 lg:border-b-0 lg:border-r">
               <TerminalLabel>Workspace</TerminalLabel>
@@ -132,12 +190,12 @@ export default function Home() {
             <section className="flex min-h-[380px] flex-col border-b border-slate-700/80 lg:border-b-0 lg:border-r">
               <div className="flex items-center justify-between border-b border-slate-700/80 px-3 py-2"><div className="flex min-w-0 items-center gap-2 text-[11px]"><FileCode2 className="size-3.5 text-slate-500" /><span className="truncate text-slate-300">{activeFile?.path ?? "No file selected"}</span><span className="text-slate-600">{activeFile?.language ? `(${activeFile.language})` : ""}</span></div><TerminalButton disabled={!activeFile || saveFile.isPending || draft === activeFile.content} onClick={() => activeProjectId && activeFile && saveFile.mutate({ projectId: activeProjectId, path: activeFile.path, content: draft, language: activeFile.language })}><Save className="size-3.5" />Save</TerminalButton></div>
               {activeFile ? <Textarea value={draft} onChange={event => setDraft(event.target.value)} spellCheck={false} className="min-h-[310px] flex-1 resize-none rounded-none border-0 bg-[#0b1020] px-4 py-3 font-mono text-[12px] leading-6 text-slate-200 shadow-none focus-visible:ring-0" /> : <TerminalPlaceholder label="Workspace file editor" text="Select a source file. All manual edits stay inside the active workspace and are saved to its isolated storage." />}
-              {activeChange ? <div className="border-t border-slate-700/80 bg-[#080c16] p-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-violet-300">proposed {activeChange.operation}: {activeChange.path}</span><div className="flex gap-2"><TerminalButton disabled={reject.isPending} onClick={() => activeRun && reject.mutate({ runId: activeRun.id })}>Reject</TerminalButton><TerminalButton accent disabled={accept.isPending} onClick={() => activeRun && accept.mutate({ runId: activeRun.id })}><Check className="size-3.5" />Accept changes</TerminalButton></div></div><pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap text-[10px] leading-5 text-slate-400">{activeChange.diffText}</pre></div> : null}
+              {activeChange ? <div className="border-t border-slate-700/80 bg-[#080c16] p-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-violet-300">proposed {activeChange.operation}: {activeChange.path}</span><div className="flex gap-2"><TerminalButton disabled={reject.isPending} onClick={() => activeRun && reject.mutate({ runId: activeRun.id })}>Reject</TerminalButton><TerminalButton accent disabled={accept.isPending || acceptSelfImprovement.isPending} onClick={() => activeRun && (activeRun.taskType === "self-improvement" ? acceptSelfImprovement.mutate({ runId: activeRun.id }) : accept.mutate({ runId: activeRun.id }))}><Check className="size-3.5" />{activeRun?.taskType === "self-improvement" ? "Apply approved improvement" : "Accept changes"}</TerminalButton></div></div><pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap text-[10px] leading-5 text-slate-400">{activeChange.diffText}</pre></div> : null}
             </section>
 
             <aside className="p-3">
               <TerminalLabel>Activity</TerminalLabel>
-              <div className="mt-2 space-y-2 border-l border-slate-700 pl-3">{runs.data?.length ? runs.data.slice(0, 6).map(run => <button key={run.id} onClick={() => setActiveRunId(run.id)} className={cn("block w-full text-left text-[11px]", activeRun?.id === run.id ? "text-white" : "text-slate-500 hover:text-slate-300")}><span className={cn("mr-2", statusTone[run.status])}>●</span><span className="font-semibold">{run.taskType}</span><span className="ml-2 text-slate-600">#{run.id}</span><p className="mt-1 line-clamp-2 pl-3 text-[10px] leading-4 text-slate-500">{run.deliverable}</p></button>) : <p className="text-[11px] leading-5 text-slate-600">Commands and coding runs will appear here.</p>}</div>
+              <div className="mt-2 space-y-2 border-l border-slate-700 pl-3">{runs.data?.length ? runs.data.slice(0, 6).map(run => <button key={run.id} onClick={() => setActiveRunId(run.id)} className={cn("block w-full text-left text-[11px]", activeRun?.id === run.id ? "text-white" : "text-slate-500 hover:text-slate-300")}><span className={cn("mr-2", statusTone[run.status])}>●</span><span className="font-semibold">{displayTaskType(run.taskType)}</span><span className="ml-2 text-slate-600">#{run.id}</span><p className="mt-1 line-clamp-2 pl-3 text-[10px] leading-4 text-slate-500">{run.deliverable}</p></button>) : <p className="text-[11px] leading-5 text-slate-600">Commands and coding runs will appear here.</p>}</div>
               <TerminalLabel className="mt-6">Verification</TerminalLabel>
               <div className="mt-2 space-y-1 text-[10px]">{verification.data?.length ? verification.data.map(item => <details key={item.id} className="border-b border-slate-800 py-1.5"><summary className="flex cursor-pointer items-center justify-between gap-2"><span className="text-slate-400">{item.checkType}</span><span className={cn("uppercase", item.status === "passed" ? "text-emerald-300" : item.status === "failed" ? "text-red-300" : item.status === "skipped" ? "text-slate-500" : "text-amber-300")}>{item.status}</span></summary><pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap border-l border-slate-700 pl-2 text-[9px] leading-4 text-slate-500">{item.logText ?? "No runner log available."}</pre></details>) : <p className="leading-5 text-slate-600">Accepted changes queue checks for the isolated verification runner.</p>}</div>
               <TerminalLabel className="mt-6">Approval queue</TerminalLabel>
@@ -146,12 +204,12 @@ export default function Home() {
             </aside>
           </div>
 
-          {activeRun ? <section className="border-t border-slate-700/80 bg-[#0a0f1d] p-3 sm:p-4"><div className="mx-auto max-w-5xl border border-slate-700/80 bg-[#0d1324] p-3 text-[11px]"><div className="flex flex-wrap items-center gap-2"><span className={cn("font-semibold", statusTone[activeRun.status])}>[{activeRun.status.replaceAll("_", " ")}]</span><span className="text-slate-500">input: {activeRun.inputLanguage}</span><span className="text-slate-600">run #{activeRun.id}</span></div><p className="mt-2 whitespace-pre-wrap leading-5 text-slate-200">{activeRun.assistantResponse}</p><div className="mt-3 flex flex-wrap gap-2">{activeRun.status === "planned" ? <TerminalButton accent disabled={generate.isPending} onClick={() => generate.mutate({ runId: activeRun.id })}>{generate.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Braces className="size-3.5" />}Generate code proposal</TerminalButton> : null}{activeRun.status === "failed" ? <TerminalButton accent disabled={requestRepair.isPending} onClick={() => requestRepair.mutate({ runId: activeRun.id })}>{requestRepair.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}Repair from logs</TerminalButton> : null}{activeRun.status === "needs_approval" ? <span className="text-amber-300">Approval required before code generation.</span> : null}</div></div></section> : null}
           </div>
 
           <section className="shrink-0 border-t border-emerald-300/20 bg-[#080c16] p-3 sm:p-4">
-            <div className="mb-3 flex items-center justify-between gap-3"><div><p className="flex items-center gap-2 text-xs font-bold text-emerald-300"><Play className="size-3.5" />Command Center</p><p className="mt-1 text-[10px] text-slate-500">Describe the complete coding task in any language. SynapseX reads the full request before it plans changes.</p></div><span className="hidden text-[10px] text-slate-600 sm:block">Ctrl / Cmd + Enter to run</span></div>
-            <div className="flex items-stretch border border-emerald-300/30 bg-[#0d1324] focus-within:border-emerald-300"><div className="flex w-12 shrink-0 items-start justify-center pt-4 text-emerald-300">PS&gt;</div><Textarea value={command} onChange={event => setCommand(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); runCommand(); } }} placeholder="Assign any coding task…" className="min-h-24 flex-1 resize-y rounded-none border-0 bg-transparent px-0 py-3 font-mono text-xs leading-6 text-slate-100 shadow-none focus-visible:ring-0" /><Button onClick={runCommand} disabled={!activeProjectId || !command.trim() || analyze.isPending} className="m-2 h-auto rounded-none bg-emerald-300 px-4 text-[#07100e] hover:bg-emerald-200">{analyze.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}</Button></div>
+            <div className="mb-3 flex items-center justify-between gap-3"><div><p className="flex items-center gap-2 text-xs font-bold text-emerald-300"><Play className="size-3.5" />Command Center</p><p className="mt-1 text-[10px] text-slate-500">{selfImproveMode ? "SynapseX ke allowed source improvement ka poora brief dein. Diff aur approval ke baghair koi source change nahin hoga." : "Poora coding prompt dein. Build, create ya fix request par reviewed code proposal khud banta hai; analysis-only request par plan rehta hai."}</p></div><div className="flex items-center gap-2"><TerminalButton accent={selfImproveMode} onClick={() => setSelfImproveMode(current => !current)}><ShieldCheck className="size-3.5" />Improve SynapseX</TerminalButton><span className="hidden text-[10px] text-slate-600 sm:block">Ctrl / Cmd + Enter to run</span></div></div>
+            {submissionError ? <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-[11px] text-amber-100"><span>{submissionError}</span><TerminalButton accent onClick={() => void runCommand()}>Retry</TerminalButton></div> : null}
+            <div className="flex h-32 items-stretch border border-emerald-300/30 bg-[#0d1324] focus-within:border-emerald-300"><div className="flex w-12 shrink-0 items-start justify-center pt-4 text-emerald-300">PS&gt;</div><Textarea value={command} onChange={event => { setCommand(event.target.value); if (submissionError) setSubmissionError(null); }} onKeyDown={event => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); void runCommand(); } }} placeholder={selfImproveMode ? "SynapseX mein kis functional feature ko improve karna hai?" : "Assign any coding task…"} className="h-full min-h-0 flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-3 font-mono text-xs leading-6 text-slate-100 shadow-none [field-sizing:fixed] focus-visible:ring-0" /><Button onClick={() => void runCommand()} disabled={!command.trim() || analyze.isPending || selfImprove.isPending || createProject.isPending} className="m-2 h-auto rounded-none bg-emerald-300 px-4 text-[#07100e] hover:bg-emerald-200">{analyze.isPending || selfImprove.isPending || createProject.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}</Button></div>
           </section>
         </div>
       </section>
@@ -171,3 +229,10 @@ function TerminalLabel({ children, className }: { children: React.ReactNode; cla
 function TerminalPlaceholder({ label, text }: { label: string; text: string }) { return <div className="flex flex-1 flex-col items-center justify-center p-8 text-center"><FileCode2 className="size-6 text-slate-600" /><p className="mt-3 text-xs text-slate-300">{label}</p><p className="mt-2 max-w-sm text-[11px] leading-5 text-slate-600">{text}</p></div>; }
 function inferLanguage(path: string) { const ext = path.split(".").pop()?.toLowerCase(); return ({ ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx", py: "python", json: "json", css: "css", html: "html", md: "markdown", yml: "yaml", yaml: "yaml", sh: "shell" } as Record<string, string>)[ext ?? ""] ?? "text"; }
 function slugify(value: string) { return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
+function displayTaskType(value: string) { return ["invalid-request", "clarification-required"].includes(value.toLowerCase()) ? "coding request" : value; }
+function displayRunResponse(run: { taskType: string; assistantResponse: string }) {
+  const legacyFolderResponse = run.assistantResponse.includes("Browser security ki wajah se Command Center prompt se computer ka folder direct open nahin kar sakta");
+  return ["invalid-request", "clarification-required"].includes(run.taskType.toLowerCase()) || legacyFolderResponse
+    ? "Aapki coding request plan ke liye receive ho gayi hai. Main isay generic coding task ke tor par review kar raha hoon; workspace files, requested deliverable aur aapki condition ke mutabiq next code proposal tayar ki ja sakti hai. Aapki approval ke baghair koi file change apply nahin hoga."
+    : run.assistantResponse;
+}
