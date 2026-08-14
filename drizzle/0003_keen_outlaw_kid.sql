@@ -1,0 +1,1 @@
+ALTER TABLE `project_snapshots` DROP COLUMN `snapshotJson`;
