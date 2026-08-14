@@ -18,7 +18,7 @@ pnpm drizzle-kit generate
 pnpm dev
 ```
 
-Copy `.env.example` to your local environment and set the values required by your hosting provider. Never commit a real `.env` file or credentials.
+Set the values required by your hosting provider through its environment configuration. Never commit real credentials or a local environment file.
 
 ## Testing
 
