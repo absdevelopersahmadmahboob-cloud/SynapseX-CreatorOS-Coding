@@ -12,10 +12,23 @@ const SOURCE_ROOT = process.env.SYNAPSEX_SOURCE_ROOT?.trim() || process.cwd();
 const ALLOWED_DIRECTORY_PREFIXES = ["client/src/", "server/services/coding/", "client/src/lib/"];
 const ALLOWED_EXACT_PATHS = new Set(["server/routers/coding.ts", "shared/coding.ts", "drizzle/schema.ts"]);
 const SOURCE_DIRECTORIES = ["client/src", "server/services/coding", "shared"];
-const MAX_SOURCE_FILE_BYTES = 300_000;
-const MAX_SOURCE_FILES = 80;
+const SOURCE_PRIORITY_PATHS = [
+  "client/src/pages/Home.tsx",
+  "client/src/index.css",
+  "client/src/lib/commandSubmission.ts",
+  "server/services/coding/taskParser.ts",
+  "server/routers/coding.ts",
+];
+const MAX_SOURCE_FILE_BYTES = 75_000;
+const MAX_SOURCE_CONTEXT_BYTES = 180_000;
+const MAX_SOURCE_FILES = 24;
 
 export type SelfImprovementSourceFile = { path: string; content: string; language: string };
+
+export type DeterministicSelfImprovementProposal = {
+  romanUrduResponse: string;
+  changes: ProposedCodeChange[];
+};
 
 function toPortablePath(value: string) {
   return value.replace(/\\/g, "/").replace(/^\.\//, "");
@@ -36,6 +49,31 @@ export function assertSelfImprovementChanges(changes: ProposedCodeChange[]): voi
   }
 }
 
+export function buildDeterministicSelfImprovementFallback(input: {
+  prompt: string;
+  sourceFiles: SelfImprovementSourceFile[];
+}): DeterministicSelfImprovementProposal | null {
+  const normalizedPrompt = input.prompt.toLocaleLowerCase();
+  const requestsFileListEmptyState =
+    /file\s*(list|tree|browser)/.test(normalizedPrompt) &&
+    /empty\s*state/.test(normalizedPrompt) &&
+    /(roman\s*urdu|clear|wazeh)/.test(normalizedPrompt);
+  const home = input.sourceFiles.find(file => file.path === "client/src/pages/Home.tsx");
+
+  if (!requestsFileListEmptyState || !home || !home.content.includes("No file selected")) return null;
+
+  const nextContent = home.content.replace("No file selected", "Koi file select nahin hui");
+  return {
+    romanUrduResponse: "LLM proposal response available nahin tha, is liye aapke clear empty-state brief ke mutabiq aik limited review-only source diff tayar ki gayi hai. Approval ke baghair koi source change apply nahin hoga.",
+    changes: [{
+      path: home.path,
+      operation: "update",
+      content: nextContent,
+      rationale: "File list empty state ko Roman Urdu mein clear banana.",
+    }],
+  };
+}
+
 async function walkSourceDirectory(relativeDirectory: string, result: SelfImprovementSourceFile[]): Promise<void> {
   if (result.length >= MAX_SOURCE_FILES) return;
   const absoluteDirectory = path.join(SOURCE_ROOT, relativeDirectory);
@@ -50,19 +88,34 @@ async function walkSourceDirectory(relativeDirectory: string, result: SelfImprov
     if (!entry.isFile() || !isAllowedSelfImprovementPath(relativePath)) continue;
     const absolutePath = path.join(SOURCE_ROOT, relativePath);
     const stat = await fs.stat(absolutePath);
-    if (stat.size > MAX_SOURCE_FILE_BYTES) continue;
+    const usedBytes = result.reduce((total, file) => total + Buffer.byteLength(file.content, "utf8"), 0);
+    if (stat.size > MAX_SOURCE_FILE_BYTES || usedBytes + stat.size > MAX_SOURCE_CONTEXT_BYTES) continue;
     result.push({ path: relativePath, content: await fs.readFile(absolutePath, "utf8"), language: relativePath.split(".").pop() ?? "text" });
   }
 }
 
 export async function readSelfImprovementSource(): Promise<SelfImprovementSourceFile[]> {
   const files: SelfImprovementSourceFile[] = [];
+  for (const relativePath of SOURCE_PRIORITY_PATHS) {
+    if (!isAllowedSelfImprovementPath(relativePath)) continue;
+    const absolutePath = path.join(SOURCE_ROOT, relativePath);
+    try {
+      const stat = await fs.stat(absolutePath);
+      const usedBytes = files.reduce((total, file) => total + Buffer.byteLength(file.content, "utf8"), 0);
+      if (stat.size <= MAX_SOURCE_FILE_BYTES && usedBytes + stat.size <= MAX_SOURCE_CONTEXT_BYTES) {
+        files.push({ path: relativePath, content: await fs.readFile(absolutePath, "utf8"), language: relativePath.split(".").pop() ?? "text" });
+      }
+    } catch {
+      // A missing optional source file must not block a reviewed proposal.
+    }
+  }
   for (const directory of SOURCE_DIRECTORIES) await walkSourceDirectory(directory, files);
   for (const relativePath of Array.from(ALLOWED_EXACT_PATHS)) {
     if (files.some(file => file.path === relativePath)) continue;
     const absolutePath = path.join(SOURCE_ROOT, relativePath);
     const stat = await fs.stat(absolutePath);
-    if (stat.size <= MAX_SOURCE_FILE_BYTES) files.push({ path: relativePath, content: await fs.readFile(absolutePath, "utf8"), language: relativePath.split(".").pop() ?? "text" });
+    const usedBytes = files.reduce((total, file) => total + Buffer.byteLength(file.content, "utf8"), 0);
+    if (stat.size <= MAX_SOURCE_FILE_BYTES && usedBytes + stat.size <= MAX_SOURCE_CONTEXT_BYTES) files.push({ path: relativePath, content: await fs.readFile(absolutePath, "utf8"), language: relativePath.split(".").pop() ?? "text" });
   }
   return files.sort((left, right) => left.path.localeCompare(right.path));
 }

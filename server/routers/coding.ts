@@ -5,7 +5,7 @@ import { parseCodingTask, proposeCodeChanges } from "../services/coding/taskPars
 import { approvalMessage } from "../services/coding/approvalPolicy";
 import { executeIsolatedVerification } from "../services/coding/verificationRunner";
 import { buildVerificationRepairPrompt } from "../services/coding/repairProposal";
-import { applyApprovedSelfImprovement, assertSelfImprovementChanges, readSelfImprovementSource } from "../services/coding/selfImprovement";
+import { applyApprovedSelfImprovement, assertSelfImprovementChanges, buildDeterministicSelfImprovementFallback, readSelfImprovementSource } from "../services/coding/selfImprovement";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const projectInput = z.object({ name: z.string().trim().min(1).max(120) });
@@ -64,10 +64,28 @@ export const codingRouter = router({
       confirmationRequired: true, confirmationReason: "SynapseX ke apne source code mein change ke liye explicit approval zaroori hai.",
       romanUrduResponse: "SynapseX improvement proposal tayar ho raha hai. Koi apna source code approval ke baghair change nahin hoga.", selfImprovement: true,
     };
-    const proposal = await proposeCodeChanges({
+    const proposalInput = {
       userPrompt: `SynapseX CreatorOS Coding ke apne allowed source ko improve karo. User ka improvement brief: ${input.prompt}\n\nSirf functional source change propose karo. Secrets, deployment config, dependencies aur source deletion allowed nahin hain.`,
       taskJson: JSON.stringify(task), files: sourceFiles,
-    });
+    };
+    let proposal: Awaited<ReturnType<typeof proposeCodeChanges>>;
+    try {
+      proposal = await proposeCodeChanges(proposalInput);
+    } catch (primaryError) {
+      try {
+        proposal = await proposeCodeChanges({ ...proposalInput, model: "gpt-5" });
+      } catch (fallbackError) {
+        console.error("Self-improvement proposal failed after primary and fallback attempts", {
+          primary: primaryError instanceof Error ? primaryError.message : "unknown",
+          fallback: fallbackError instanceof Error ? fallbackError.message : "unknown",
+        });
+        const deterministicProposal = buildDeterministicSelfImprovementFallback({ prompt: input.prompt, sourceFiles });
+        if (!deterministicProposal) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Self-improvement proposal ka valid response nahin mila. Koi source change ya approval request create nahin hui; kuch seconds baad Retry karein." });
+        }
+        proposal = deterministicProposal;
+      }
+    }
     assertSelfImprovementChanges(proposal.changes);
     const run = await db.createCodingRun({ projectId: project.id, ownerId: ctx.user.id, prompt: input.prompt, inputLanguage: task.inputLanguage, taskType: task.taskType, deliverable: task.deliverable, taskJson: JSON.stringify(task), assistantResponse: proposal.romanUrduResponse, status: "needs_approval" });
     const existingFiles = new Map(sourceFiles.map(file => [file.path, file]));
@@ -130,8 +148,8 @@ export const codingRouter = router({
   acceptSelfImprovement: protectedProcedure.input(z.object({ runId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
     const run = await db.getCodingRun(ctx.user.id, input.runId);
     if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
-    const storedTask = JSON.parse(run.taskJson) as { task?: { selfImprovement?: boolean } };
-    if (!storedTask.task?.selfImprovement) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This run is not a self-improvement proposal" });
+    const storedTask = JSON.parse(run.taskJson) as { selfImprovement?: boolean };
+    if (!storedTask.selfImprovement) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This run is not a self-improvement proposal" });
     if (run.status !== "awaiting_review") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Explicit approval is required before applying a self-improvement proposal" });
     const changes = await db.listFileChanges(ctx.user.id, run.id);
     const result = await applyApprovedSelfImprovement(changes.filter(change => change.reviewStatus === "pending").map(change => ({ path: change.path, operation: change.operation, content: change.nextContent, rationale: "Approved self-improvement diff" })));

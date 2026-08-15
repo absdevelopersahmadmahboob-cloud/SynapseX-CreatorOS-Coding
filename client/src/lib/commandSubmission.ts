@@ -13,6 +13,9 @@ export async function submitCodingCommand(input: {
 
 export function getCommandSubmissionError(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
+  if (/unexpected token|not valid json|doctype|json/i.test(message)) {
+    return "Proposal service se readable response nahin mila. Koi file change ya approval request create nahin hui; kuch seconds baad Retry dabayein.";
+  }
   if (/fetch failed|failed to fetch|network|network request failed/i.test(message)) {
     return "Connection temporarily available nahin hai. Aapka prompt textarea mein mehfooz hai; kuch seconds baad Retry dabayein.";
   }

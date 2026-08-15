@@ -26,4 +26,8 @@ describe("Command Center submission", () => {
   it("turns a failed browser fetch into a retryable Roman Urdu message", () => {
     expect(getCommandSubmissionError(new Error("fetch failed"))).toContain("Retry");
   });
+
+  it("hides malformed JSON transport details behind a safe Roman Urdu retry message", () => {
+    expect(getCommandSubmissionError(new Error("Unexpected token '<', \"<!DOCTYPE\" is not valid JSON"))).toContain("Koi file change ya approval request create nahin hui");
+  });
 });

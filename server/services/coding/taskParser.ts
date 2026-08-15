@@ -230,12 +230,13 @@ export async function proposeCodeChanges(input: {
   userPrompt: string;
   taskJson: string;
   files: Array<{ path: string; content: string; language: string }>;
+  model?: string;
 }): Promise<CodeProposal> {
   const workspace = input.files.length
     ? input.files.map(file => `FILE: ${file.path}\n\`\`\`\n${file.content}\n\`\`\``).join("\n\n")
     : "The workspace is empty.";
   const response = await invokeLLM({
-    model: "claude-sonnet-4-6",
+    model: input.model ?? "claude-sonnet-4-6",
     maxTokens: 12000,
     messages: [
       { role: "system", content: `${buildCodingSystemPrompt()}\n\nYou are now proposing exact source-code changes for a planned task. Use the existing workspace files as the source of truth. Return only changes necessary to complete the task. Use safe relative paths; never use paths containing '..', absolute paths, package manager cache paths, or secrets. For create and update return the complete resulting file content. For delete return null content. Do not use deletion merely to simplify a task. When the request is to create a website or application and the workspace is empty, create the complete initial file set, including index.html and every required local CSS or JavaScript file. When the request is a local PC folder or file operation, create a carefully commented .ps1 or shell script that the user can review and run on their own machine; never state that it was directly executed. User-facing response must be Roman Urdu with Latin characters only.` },

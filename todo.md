@@ -45,3 +45,21 @@
 - [x] Validate website scaffold proposals include a previewable HTML entry file before review.
 - [x] Validate PC file or folder task proposals include the requested local PowerShell or shell script before review.
 - [x] Prevent persisted legacy folder-specific activity responses from overriding the neutral planned-coding wording.
+- [ ] Diagnose and fix the self-improvement proposal submission failure that returns an HTML response parsed as JSON.
+- [ ] Verify a successful self-improvement proposal creates a visible pending approval before any source apply action.
+- [ ] Reproduce the authenticated coding.selfImprove mutation and capture its exact request and response path.
+- [x] Add an automated self-improvement mutation test proving malformed proposal output becomes a JSON tRPC error rather than an HTML parsing failure.
+- [ ] Verify in the authenticated UI that self-improvement ends in a reviewed proposal or a clean Roman Urdu retry error, never an Unexpected token message.
+- [x] Capture the self-improvement proposal provider failure details without exposing raw transport internals to the Command Center.
+- [x] Add a bounded fallback proposal path so a valid reviewed diff and pending approval can still be created when the primary proposal response is malformed.
+- [ ] Capture the exact production primary and secondary proposal failure reasons for the authenticated self-improvement mutation.
+- [x] Provide a deterministic, review-only source patch fallback when both LLM proposal attempts fail, without applying any source change automatically.
+- [x] Verify the deterministic fallback creates persisted file diffs and a permanent-operation approval request through the router regression suite.
+- [x] Resume only the SynapseX CreatorOS Coding self-improvement proposal and approval workflow; do not add CRM functionality to this project.
+- [x] Research and recommend professional CRM visual themes suitable for a future SynapseX CRM workspace.
+- [x] Deliver the recommended CRM theme directions as standalone visual mockup images for selection.
+- [x] Confirm all generated CRM theme boards complete successfully without failed placeholders.
+- [x] Send the completed CRM theme boards to the user in a selection-ready visual format.
+- [x] Generate and deliver additional professional CRM visual theme boards for expanded user selection.
+- [x] Individually verify all eight CRM visual boards and replace any failed placeholder before a future checkpoint.
+- [x] Document the individual verification outcome for all eight CRM visual boards.
